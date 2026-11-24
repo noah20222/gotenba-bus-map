@@ -1,0 +1,603 @@
+
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<title>御殿場・小山地区 バス運行状況マップ</title>
+
+<link
+ rel="stylesheet"
+ href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+/>
+
+<style>
+
+* {
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0;
+    font-family:
+        "Noto Sans JP",
+        "Meiryo",
+        sans-serif;
+    background: #f5f7fa;
+}
+
+header {
+    background: #183153;
+    color: white;
+    padding: 14px 22px;
+}
+
+header h1 {
+    margin: 0;
+    font-size: 21px;
+}
+
+header p {
+    margin: 6px 0 0;
+    font-size: 12px;
+    opacity: 0.85;
+}
+
+.controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 14px;
+    padding: 14px 20px;
+    background: white;
+    border-bottom: 1px solid #ddd;
+    align-items: center;
+}
+
+.control {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+.control label {
+    font-size: 12px;
+    font-weight: bold;
+    color: #444;
+}
+
+select, button {
+    padding: 8px 12px;
+    border: 1px solid #ccc;
+    border-radius: 5px;
+    background: white;
+    font-size: 14px;
+}
+
+button {
+    cursor: pointer;
+    background: #183153;
+    color: white;
+    border: none;
+}
+
+button:hover {
+    background: #2f5985;
+}
+
+.stats {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    padding: 10px 20px;
+    background: #eef3f8;
+}
+
+.stat {
+    font-size: 14px;
+}
+
+.stat strong {
+    font-size: 20px;
+    color: #183153;
+}
+
+#map {
+    width: 100%;
+    height: calc(100vh - 245px);
+    min-height: 450px;
+}
+
+.legend {
+    background: white;
+    padding: 12px;
+    line-height: 24px;
+    border-radius: 6px;
+    box-shadow: 0 1px 8px #999;
+    font-size: 12px;
+}
+
+.legend span {
+    display: inline-block;
+    width: 22px;
+    height: 5px;
+    margin-right: 7px;
+    vertical-align: middle;
+}
+
+footer {
+    padding: 9px 20px;
+    font-size: 11px;
+    color: #555;
+    background: white;
+}
+
+@media(max-width: 700px) {
+
+    header h1 {
+        font-size: 17px;
+    }
+
+    .controls {
+        gap: 8px;
+        padding: 10px;
+    }
+
+    #map {
+        height: 65vh;
+    }
+
+}
+
+</style>
+
+</head>
+
+<body>
+
+<header>
+
+<h1>御殿場・小山地区 バス運行状況マップ</h1>
+
+<p>
+GTFS時刻表に基づく時間帯別・路線別の運行集中状況
+</p>
+
+</header>
+
+
+<div class="controls">
+
+<div class="control">
+<label>曜日区分</label>
+<select id="day">
+<option value="平日">平日</option>
+<option value="土曜">土曜</option>
+<option value="日曜">日曜</option>
+</select>
+</div>
+
+<div class="control">
+<label>時間帯</label>
+<select id="hour"></select>
+</div>
+
+<div class="control">
+<label>路線</label>
+<select id="route">
+<option value="ALL">全路線</option>
+</select>
+</div>
+
+<div class="control">
+<label>表示対象</label>
+<select id="displayType">
+<option value="both">運行区間＋停留所</option>
+<option value="segment">運行区間のみ</option>
+<option value="stop">停留所のみ</option>
+</select>
+</div>
+
+<div class="control">
+<label>データ出力</label>
+<button onclick="downloadCSV()">CSVダウンロード</button>
+</div>
+
+</div>
+
+
+<div class="stats">
+
+<div class="stat">
+対象日：
+<strong id="dateLabel">-</strong>
+</div>
+
+<div class="stat">
+表示区間：
+<strong id="segmentCount">0</strong>
+</div>
+
+<div class="stat">
+表示停留所：
+<strong id="stopCount">0</strong>
+</div>
+
+</div>
+
+
+<div id="map"></div>
+
+
+<footer>
+※運行本数はGTFS時刻表に基づく計画値です。
+停留所間は直線で結んだ概略表示であり、実際の道路経路ではありません。
+区間を時間帯別に集計するため、時間帯をまたぐ便は複数時間帯に計上されます。
+</footer>
+
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+<script>
+
+let gtfsData = null;
+let map = null;
+
+let segmentLayer = null;
+let stopLayer = null;
+
+let currentRows = [];
+
+
+function getColor(n) {
+
+    if (n >= 10) return "#d73027";
+    if (n >= 6) return "#fc8d59";
+    if (n >= 3) return "#e6ab02";
+
+    return "#4575b4";
+}
+
+
+function getWeight(n) {
+
+    return Math.min(2 + n * 1.2, 15);
+}
+
+
+function getRadius(n) {
+
+    return Math.min(3 + n * 0.6, 18);
+}
+
+
+function initializeControls() {
+
+    const hourSelect = document.getElementById("hour");
+
+    for (let h = 0; h < 24; h++) {
+
+        const option = document.createElement("option");
+
+        option.value = h;
+        option.textContent = `${h}時台`;
+
+        hourSelect.appendChild(option);
+    }
+
+    hourSelect.value = "8";
+
+    const routeSelect = document.getElementById("route");
+
+    Object.entries(gtfsData.routes)
+        .sort((a, b) => a[1].localeCompare(b[1], "ja"))
+        .forEach(([id, name]) => {
+
+            const option = document.createElement("option");
+
+            option.value = id;
+            option.textContent = name + " [" + id + "]";
+
+            routeSelect.appendChild(option);
+        });
+
+    ["day", "hour", "route", "displayType"].forEach(id => {
+
+        document.getElementById(id)
+            .addEventListener("change", updateMap);
+
+    });
+
+}
+
+
+function aggregateRows(day, hour, route) {
+
+    const filtered = gtfsData.records.filter(r => {
+
+        return (
+            r.day === day &&
+            r.hour === hour &&
+            (route === "ALL" || r.route === route)
+        );
+
+    });
+
+    const grouped = new Map();
+
+    for (const row of filtered) {
+
+        const key = row.type + "|" + row.id;
+
+        if (!grouped.has(key)) {
+
+            grouped.set(key, {
+                ...row,
+                count: 0,
+                routes: new Set()
+            });
+
+        }
+
+        const item = grouped.get(key);
+
+        item.count += row.count;
+        item.routes.add(row.route);
+
+    }
+
+    return Array.from(grouped.values()).map(r => ({
+        ...r,
+        routeCount: r.routes.size,
+        routes: Array.from(r.routes)
+    }));
+
+}
+
+
+function updateMap() {
+
+    const day = document.getElementById("day").value;
+    const hour = Number(document.getElementById("hour").value);
+    const route = document.getElementById("route").value;
+
+    const displayType =
+        document.getElementById("displayType").value;
+
+    currentRows = aggregateRows(day, hour, route);
+
+    segmentLayer.clearLayers();
+    stopLayer.clearLayers();
+
+    let segmentCount = 0;
+    let stopCount = 0;
+
+    for (const row of currentRows) {
+
+        const color = getColor(row.count);
+
+        if (row.type === "segment") {
+
+            segmentCount++;
+
+            if (displayType === "stop") continue;
+
+            const line = L.polyline(
+                [
+                    [row.lat1, row.lon1],
+                    [row.lat2, row.lon2]
+                ],
+                {
+                    color: color,
+                    weight: getWeight(row.count),
+                    opacity: 0.85
+                }
+            );
+
+            line.bindPopup(
+                "<b>停留所間の運行状況</b><br>" +
+                "運行本数：" + row.count + "便<br>" +
+                "路線数：" + row.routeCount
+            );
+
+            line.addTo(segmentLayer);
+
+        }
+
+        if (row.type === "stop") {
+
+            stopCount++;
+
+            if (displayType === "segment") continue;
+
+            const circle = L.circleMarker(
+                [row.lat, row.lon],
+                {
+                    radius: getRadius(row.count),
+                    color: "#222",
+                    weight: 1,
+                    fillColor: color,
+                    fillOpacity: 0.8
+                }
+            );
+
+            circle.bindPopup(
+                "<b>" + escapeHTML(row.name) + "</b><br>" +
+                "発車本数：" + row.count + "便<br>" +
+                "路線数：" + row.routeCount
+            );
+
+            circle.addTo(stopLayer);
+
+        }
+
+    }
+
+    document.getElementById("dateLabel").textContent =
+        gtfsData.dates[day];
+
+    document.getElementById("segmentCount").textContent =
+        segmentCount.toLocaleString();
+
+    document.getElementById("stopCount").textContent =
+        stopCount.toLocaleString();
+
+}
+
+
+function escapeHTML(value) {
+
+    return String(value).replace(/[&<>"']/g, c => ({
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        '"': "&quot;",
+        "'": "&#39;"
+    }[c]));
+
+}
+
+
+function downloadCSV() {
+
+    const displayType =
+        document.getElementById("displayType").value;
+
+    const rows = currentRows.filter(r => {
+
+        if (displayType === "both") return true;
+
+        return r.type === displayType;
+
+    });
+
+    const columns = [
+        "day", "hour", "route", "type", "id",
+        "name", "lat", "lon",
+        "lat1", "lon1", "lat2", "lon2",
+        "count", "routeCount"
+    ];
+
+    const csv = [
+        columns.join(","),
+        ...rows.map(row =>
+            columns.map(col => {
+
+                let value = row[col] ?? "";
+
+                if (Array.isArray(value)) {
+                    value = value.join("|");
+                }
+
+                return '"' +
+                    String(value).replace(/"/g, '""') +
+                    '"';
+
+            }).join(",")
+        )
+    ].join("\r\n");
+
+    const blob = new Blob(
+        ["\uFEFF", csv],
+        {type: "text/csv;charset=utf-8"}
+    );
+
+    const url = URL.createObjectURL(blob);
+
+    const a = document.createElement("a");
+
+    a.href = url;
+    a.download = "gtfs_hourly.csv";
+
+    a.click();
+
+    URL.revokeObjectURL(url);
+
+}
+
+
+function addLegend() {
+
+    const legend = L.control({
+        position: "bottomright"
+    });
+
+    legend.onAdd = function() {
+
+        const div = L.DomUtil.create("div", "legend");
+
+        div.innerHTML = `
+            <b>運行本数</b><br>
+            <span style="background:#4575b4"></span>1～2便<br>
+            <span style="background:#e6ab02"></span>3～5便<br>
+            <span style="background:#fc8d59"></span>6～9便<br>
+            <span style="background:#d73027"></span>10便以上
+        `;
+
+        return div;
+    };
+
+    legend.addTo(map);
+
+}
+
+
+async function initialize() {
+
+    const response = await fetch("./data.json");
+
+    if (!response.ok) {
+        throw new Error("data.jsonを読み込めません");
+    }
+
+    gtfsData = await response.json();
+
+    map = L.map("map").setView(
+        gtfsData.center,
+        11
+    );
+
+    L.tileLayer(
+        "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+        {
+            maxZoom: 19,
+            attribution:
+                '&copy; OpenStreetMap contributors'
+        }
+    ).addTo(map);
+
+    segmentLayer = L.layerGroup().addTo(map);
+    stopLayer = L.layerGroup().addTo(map);
+
+    L.control.layers(
+        null,
+        {
+            "運行区間": segmentLayer,
+            "停留所": stopLayer
+        }
+    ).addTo(map);
+
+    initializeControls();
+    addLegend();
+    updateMap();
+
+}
+
+
+initialize().catch(error => {
+
+    console.error(error);
+
+    alert(
+        "地図データの読み込みに失敗しました。" +
+        "GitHub PagesなどのWebサーバー上で開いてください。"
+    );
+
+});
+
+</script>
+
+</body>
+</html>
