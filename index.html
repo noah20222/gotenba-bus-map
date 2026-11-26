@@ -317,6 +317,7 @@ function aggregate(rows, keyFunction) {
 
 // ============================================================
 // 凡例
+// 0本のみ黒色の細い点線
 // ============================================================
 
 function updateLegend(metric) {
@@ -354,17 +355,31 @@ function updateLegend(metric) {
     legendDiv.innerHTML =
         "<b>" + title + "</b><br>" +
 
-        labels.map((label, i) =>
+        labels.map((label, i) => {
 
-            `<span style="
-                display:inline-block;
-                width:20px;
-                height:${i === 0 ? 2 : 6}px;
-                margin-right:7px;
-                background:${colors[i]};
-            "></span>${label}`
+            // 0本のみ黒い点線
+            const lineStyle = i === 0
+                ? "border-top:1.5px dashed #000000;"
+                : `border-top:5px solid ${colors[i]};`;
 
-        ).join("<br>");
+            return `
+                <div style="
+                    display:flex;
+                    align-items:center;
+                    gap:8px;
+                    margin:4px 0;
+                ">
+                    <span style="
+                        display:inline-block;
+                        width:24px;
+                        height:0;
+                        ${lineStyle}
+                    "></span>
+                    <span>${label}</span>
+                </div>
+            `;
+
+        }).join("");
 }
 
 
@@ -467,6 +482,7 @@ function updateMap() {
             metric
         );
 
+        // 線幅
         let width;
 
         if (count === 0) {
@@ -487,7 +503,7 @@ function updateMap() {
             ? 0.85
             : 0.9;
 
-        // 0本だけ黒色の点線
+        // 0本のみ黒色の点線
         const dashArray = count === 0
             ? "2,5"
             : null;
@@ -634,10 +650,7 @@ function updateMap() {
 
 function initialize() {
 
-    // ========================================================
     // 運行パターン選択
-    // ========================================================
-
     for (
         const [pattern, meta]
         of Object.entries(D.patterns)
@@ -658,10 +671,7 @@ function initialize() {
         );
     }
 
-    // ========================================================
     // 時間帯選択
-    // ========================================================
-
     for (
         const [period, label]
         of Object.entries(D.periods)
@@ -674,10 +684,7 @@ function initialize() {
 
     $("period").value = "朝";
 
-    // ========================================================
     // 路線選択
-    // ========================================================
-
     const routeEntries = Object.entries(
         D.routes
     ).sort(
@@ -695,10 +702,7 @@ function initialize() {
         );
     }
 
-    // ========================================================
     // 地図本体
-    // ========================================================
-
     map = L.map("map").setView(
         D.center,
         11
@@ -709,18 +713,13 @@ function initialize() {
     // --------------------------------------------------------
 
     const osm = L.tileLayer(
-
         "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
-
         {
             maxZoom: 19,
-
             attribution:
                 "&copy; OpenStreetMap contributors"
         }
-
     ).addTo(map);
-
 
     // --------------------------------------------------------
     // 背景② OSM（白黒）
@@ -728,79 +727,53 @@ function initialize() {
     // --------------------------------------------------------
 
     const osmBW = L.tileLayer(
-
         "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
-
         {
             maxZoom: 19,
-
             className: "osm-grayscale",
-
             attribution:
                 "&copy; OpenStreetMap contributors"
         }
     );
-
 
     // --------------------------------------------------------
     // 背景③ 国土地理院白地図
     // --------------------------------------------------------
 
     const gsiBlank = L.tileLayer(
-
         "https://cyberjapandata.gsi.go.jp/xyz/blank/{z}/{x}/{y}.png",
-
         {
             maxZoom: 18,
-
             maxNativeZoom: 14,
-
             attribution:
                 "&copy; 国土地理院"
         }
     );
 
-
-    // ========================================================
     // 運行区間・停留所レイヤー
-    // ========================================================
-
     lines = L.layerGroup().addTo(map);
     points = L.layerGroup().addTo(map);
 
-
-    // ========================================================
     // 背景地図3種類の切替
-    // ========================================================
-
     L.control.layers(
-
         {
             "OSM": osm,
             "OSM（白黒）": osmBW,
             "国土地理院白地図": gsiBlank
         },
-
         {
             "運行区間": lines,
             "停留所": points
         },
-
         {
             position: "topright",
             collapsed: false
         }
-
     ).addTo(map);
-
 
     L.control.scale().addTo(map);
 
-
-    // ========================================================
     // 選択変更イベント
-    // ========================================================
-
     for (const id of [
         "pattern",
         "period",
@@ -815,11 +788,7 @@ function initialize() {
         );
     }
 
-
-    // ========================================================
     // 凡例
-    // ========================================================
-
     const legend = L.control({
         position: "bottomright"
     });
@@ -845,14 +814,10 @@ function initialize() {
 // ============================================================
 
 try {
-
     initialize();
-
 } catch (error) {
-
     $("info").textContent =
         "エラー：" + error.message;
-
     console.error(error);
 }
 
