@@ -501,8 +501,10 @@ function updateMap() {
             ? 0.85
             : 0.9;
 
-        // 0本も実線
-        const dashArray = null;
+// 0本だけ黒色の点線
+const dashArray = count === 0
+    ? "2,5"
+    : null;
 
         L.polyline(
             coords,
