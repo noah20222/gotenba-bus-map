@@ -103,12 +103,7 @@ footer {
     color: #555;
 }
 
-/* ==========================================
-   OSM白黒表示
-   APIキー不要
-   地図タイルのみ白黒化
-========================================== */
-
+/* OSM白黒表示：APIキー不要 */
 .osm-grayscale {
     filter: grayscale(100%) brightness(1.08);
     -webkit-filter: grayscale(100%) brightness(1.08);
@@ -261,7 +256,9 @@ function escapeHTML(s) {
 
 function getTotalColor(n) {
 
-    if (n <= 0) return "#bdbdbd";
+    // 0本は黒
+    if (n <= 0) return "#000000";
+
     if (n < 2) return "#3182bd";
     if (n < 3) return "#fee08b";
     if (n < 5) return "#fc8d59";
@@ -276,7 +273,9 @@ function getTotalColor(n) {
 
 function getHourlyColor(n) {
 
-    if (n <= 0) return "#bdbdbd";
+    // 0本は黒
+    if (n <= 0) return "#000000";
+
     if (n < 1) return "#3182bd";
     if (n < 2) return "#fee08b";
     if (n < 3) return "#fc8d59";
@@ -349,7 +348,7 @@ function updateLegend(metric) {
         ];
 
     const colors = [
-        "#bdbdbd",
+        "#000000",
         "#3182bd",
         "#fee08b",
         "#fc8d59",
@@ -364,7 +363,7 @@ function updateLegend(metric) {
             `<span style="
                 display:inline-block;
                 width:20px;
-                height:6px;
+                height:${i === 0 ? 2 : 6}px;
                 margin-right:7px;
                 background:${colors[i]};
             "></span>${label}`
@@ -472,20 +471,38 @@ function updateMap() {
             metric
         );
 
-        const width = count > 0
-            ? Math.min(
+        // ====================================================
+        // 線の太さ
+        //
+        // 0本：1.5px
+        // 1本：3px
+        // 2本：4px
+        // 3～4本：5px
+        // 5本以上：7px
+        // ====================================================
+
+        let width;
+
+        if (count === 0) {
+            width = 1.5;
+        } else if (metric === "total") {
+            if (count === 1) width = 3;
+            else if (count === 2) width = 4;
+            else if (count <= 4) width = 5;
+            else width = 7;
+        } else {
+            width = Math.min(
                 2 + Math.sqrt(value) * 1.2,
                 8
-            )
-            : 2;
+            );
+        }
 
         const opacity = count > 0
             ? 0.85
-            : 0.5;
+            : 0.9;
 
-        const dashArray = count > 0
-            ? null
-            : "4,6";
+        // 0本も実線
+        const dashArray = null;
 
         L.polyline(
             coords,
@@ -721,9 +738,7 @@ function initialize() {
 
     // --------------------------------------------------------
     // 背景② OSM（白黒）
-    //
     // APIキー不要
-    // OSM標準タイルをCSSで白黒化
     // --------------------------------------------------------
 
     const osmBW = L.tileLayer(
@@ -765,7 +780,6 @@ function initialize() {
     // ========================================================
 
     lines = L.layerGroup().addTo(map);
-
     points = L.layerGroup().addTo(map);
 
 
@@ -777,28 +791,23 @@ function initialize() {
 
         {
             "OSM": osm,
-
             "OSM（白黒）": osmBW,
-
             "国土地理院白地図": gsiBlank
         },
 
         {
             "運行区間": lines,
-
             "停留所": points
         },
 
         {
             position: "topright",
-
             collapsed: false
         }
 
     ).addTo(map);
 
 
-    // 縮尺
     L.control.scale().addTo(map);
 
 
@@ -807,13 +816,11 @@ function initialize() {
     // ========================================================
 
     for (const id of [
-
         "pattern",
         "period",
         "route",
         "metric",
         "display"
-
     ]) {
 
         $(id).addEventListener(
