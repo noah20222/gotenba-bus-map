@@ -28,9 +28,7 @@
 
 body {
     margin: 0;
-    font-family:
-        "Meiryo",
-        sans-serif;
+    font-family: "Meiryo", sans-serif;
     background: #f4f6f9;
     color: #183153;
 }
@@ -99,17 +97,21 @@ select {
     line-height: 23px;
 }
 
-.legend span {
-    display: inline-block;
-    width: 20px;
-    height: 6px;
-    margin-right: 7px;
-}
-
 footer {
     padding: 10px 20px;
     font-size: 11px;
     color: #555;
+}
+
+/* ==========================================
+   OSM白黒表示
+   APIキー不要
+   地図タイルのみ白黒化
+========================================== */
+
+.osm-grayscale {
+    filter: grayscale(100%) brightness(1.08);
+    -webkit-filter: grayscale(100%) brightness(1.08);
 }
 
 @media(max-width:700px) {
@@ -187,9 +189,7 @@ GTFS運行パターン・時間帯・路線別の運行密度
 
 <div class="stats">
 
-<span id="info">
-読み込み中...
-</span>
+<span id="info">読み込み中...</span>
 
 <span id="counts"></span>
 
@@ -257,12 +257,6 @@ function escapeHTML(s) {
 
 // ============================================================
 // 総本数の色分け
-//
-// 0本     灰色
-// 1本     青色
-// 2本     黄色
-// 3～4本  オレンジ
-// 5本以上 赤色
 // ============================================================
 
 function getTotalColor(n) {
@@ -293,11 +287,9 @@ function getHourlyColor(n) {
 
 function getColor(value, metric) {
 
-    if (metric === "hourly") {
-        return getHourlyColor(value);
-    }
-
-    return getTotalColor(value);
+    return metric === "hourly"
+        ? getHourlyColor(value)
+        : getTotalColor(value);
 }
 
 
@@ -365,20 +357,17 @@ function updateLegend(metric) {
     ];
 
     legendDiv.innerHTML =
-
         "<b>" + title + "</b><br>" +
 
         labels.map((label, i) =>
 
-            `<span
-                style="
-                    display:inline-block;
-                    width:20px;
-                    height:6px;
-                    margin-right:7px;
-                    background:${colors[i]};
-                "
-            ></span>${label}`
+            `<span style="
+                display:inline-block;
+                width:20px;
+                height:6px;
+                margin-right:7px;
+                background:${colors[i]};
+            "></span>${label}`
 
         ).join("<br>");
 }
@@ -401,10 +390,7 @@ function updateMap() {
     lines.clearLayers();
     points.clearLayers();
 
-    // ----------------------------------------
-    // 0本区間表示の対象となる全区間
-    // ----------------------------------------
-
+    // 全パターンの区間
     const eligible = r =>
         route === "ALL" ||
         r.route === route;
@@ -419,10 +405,7 @@ function updateMap() {
         ].sort().join("|")
     );
 
-    // ----------------------------------------
     // 選択中のパターン・時間帯
-    // ----------------------------------------
-
     const filtered = D.segments.filter(r =>
 
         r.pattern === pattern &&
@@ -444,11 +427,11 @@ function updateMap() {
         ].sort().join("|")
     );
 
-    // ----------------------------------------
-    // 区間を描画
-    // ----------------------------------------
-
     let zeroCount = 0;
+
+    // ========================================================
+    // 運行区間の描画
+    // ========================================================
 
     for (const [key, base] of allSegments) {
 
@@ -537,9 +520,9 @@ function updateMap() {
         .addTo(lines);
     }
 
-    // ----------------------------------------
+    // ========================================================
     // 停留所別発車本数
-    // ----------------------------------------
+    // ========================================================
 
     const filteredStops = D.stops.filter(r =>
 
@@ -553,9 +536,7 @@ function updateMap() {
     );
 
     const stopRows = aggregate(
-
         filteredStops,
-
         r => r.stop_id
     );
 
@@ -568,10 +549,7 @@ function updateMap() {
                 : row.count;
 
             L.circleMarker(
-                [
-                    row.lat,
-                    row.lon
-                ],
+                [row.lat, row.lon],
                 {
                     radius: Math.min(
                         3 + Math.sqrt(value) * 1.5,
@@ -604,9 +582,9 @@ function updateMap() {
         }
     }
 
-    // ----------------------------------------
+    // ========================================================
     // 集計情報
-    // ----------------------------------------
+    // ========================================================
 
     const meta = D.patterns[pattern];
 
@@ -650,9 +628,9 @@ function updateMap() {
 
 function initialize() {
 
-    // ----------------------------------------
-    // 運行パターン
-    // ----------------------------------------
+    // ========================================================
+    // 運行パターン選択
+    // ========================================================
 
     for (
         const [pattern, meta]
@@ -677,9 +655,9 @@ function initialize() {
         );
     }
 
-    // ----------------------------------------
-    // 時間帯
-    // ----------------------------------------
+    // ========================================================
+    // 時間帯選択
+    // ========================================================
 
     for (
         const [period, label]
@@ -687,27 +665,21 @@ function initialize() {
     ) {
 
         $("period").add(
-            new Option(
-                label,
-                period
-            )
+            new Option(label, period)
         );
     }
 
     $("period").value = "朝";
 
-    // ----------------------------------------
-    // 路線
-    // ----------------------------------------
+    // ========================================================
+    // 路線選択
+    // ========================================================
 
     const routeEntries = Object.entries(
         D.routes
     ).sort(
         (a, b) =>
-            a[1].localeCompare(
-                b[1],
-                "ja"
-            )
+            a[1].localeCompare(b[1], "ja")
     );
 
     for (const [id, name] of routeEntries) {
@@ -720,18 +692,18 @@ function initialize() {
         );
     }
 
-    // ----------------------------------------
+    // ========================================================
     // 地図本体
-    // ----------------------------------------
+    // ========================================================
 
     map = L.map("map").setView(
         D.center,
         11
     );
 
-    // ========================================================
-    // 背景地図① OpenStreetMap
-    // ========================================================
+    // --------------------------------------------------------
+    // 背景① OSM標準
+    // --------------------------------------------------------
 
     const osm = L.tileLayer(
 
@@ -747,27 +719,31 @@ function initialize() {
     ).addTo(map);
 
 
-    // ========================================================
-    // 背景地図② OSM（白黒）
-    // CARTO Positron
-    // ========================================================
+    // --------------------------------------------------------
+    // 背景② OSM（白黒）
+    //
+    // APIキー不要
+    // OSM標準タイルをCSSで白黒化
+    // --------------------------------------------------------
 
     const osmBW = L.tileLayer(
 
-        "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",
+        "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
 
         {
             maxZoom: 19,
 
+            className: "osm-grayscale",
+
             attribution:
-                "&copy; OpenStreetMap contributors &copy; CARTO"
+                "&copy; OpenStreetMap contributors"
         }
     );
 
 
-    // ========================================================
-    // 背景地図③ 国土地理院白地図
-    // ========================================================
+    // --------------------------------------------------------
+    // 背景③ 国土地理院白地図
+    // --------------------------------------------------------
 
     const gsiBlank = L.tileLayer(
 
@@ -784,9 +760,9 @@ function initialize() {
     );
 
 
-    // ----------------------------------------
+    // ========================================================
     // 運行区間・停留所レイヤー
-    // ----------------------------------------
+    // ========================================================
 
     lines = L.layerGroup().addTo(map);
 
@@ -822,13 +798,13 @@ function initialize() {
     ).addTo(map);
 
 
-    // 縮尺表示
+    // 縮尺
     L.control.scale().addTo(map);
 
 
-    // ----------------------------------------
-    // 選択変更時の更新
-    // ----------------------------------------
+    // ========================================================
+    // 選択変更イベント
+    // ========================================================
 
     for (const id of [
 
@@ -847,9 +823,9 @@ function initialize() {
     }
 
 
-    // ----------------------------------------
+    // ========================================================
     // 凡例
-    // ----------------------------------------
+    // ========================================================
 
     const legend = L.control({
         position: "bottomright"
@@ -867,7 +843,6 @@ function initialize() {
 
     legend.addTo(map);
 
-    // 初期表示
     updateMap();
 }
 
